@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- study_planner-1.html — APP VERSION: v2.1 -->
+<!-- study_planner-1.html — APP VERSION: v2.2 -->
 <!-- Future edits must increment by exactly 0.1 -->
 <html lang="bn">
 <head>
@@ -147,6 +147,15 @@
     .btn-danger { background:var(--danger-soft); color:var(--danger); border:1px solid rgba(255,122,122,0.22); }
 
     .note { padding:13px 14px; background:var(--accent-soft); border-left:3px solid var(--accent-1); border-radius:0 var(--radius-sm) var(--radius-sm) 0; color:var(--text-2); font-size:0.8rem; line-height:1.6; margin-top:8px; }
+
+    /* ---------- AI features (v2.2) ---------- */
+    .action-btn:disabled { opacity:0.55; cursor:not-allowed; filter:grayscale(0.25); }
+    .ai-loading { display:none; align-items:center; gap:8px; font-size:0.78rem; color:var(--text-3); margin:-2px 0 12px; }
+    .ai-spinner { width:14px; height:14px; border:2px solid var(--surface-1-border); border-top-color:var(--accent-1); border-radius:50%; animation:aiSpin .7s linear infinite; flex:none; }
+    @keyframes aiSpin { to { transform:rotate(360deg); } }
+    .ai-result { display:none; margin:-2px 0 12px; padding:12px 13px; background:var(--surface-inset); border:1px solid var(--surface-inset-border); border-radius:var(--radius-sm); font-size:0.82rem; line-height:1.7; color:var(--text-2); white-space:pre-wrap; word-break:break-word; animation:fadeIn .18s var(--ease); }
+    .ai-result.ai-error { color:var(--danger); background:var(--danger-soft); border-color:rgba(255,122,122,0.22); white-space:normal; }
+    .ai-note { font-size:0.7rem; color:var(--text-3); margin-top:2px; line-height:1.5; }
 
     /* ---------- cause sum status box (v1.7: rounded, no vertical line) ---------- */
     .cause-sum-box { padding:13px 14px; background:var(--accent-soft); border-radius:var(--radius-sm); color:var(--text-2); font-size:0.8rem; font-weight:500; line-height:1.6; margin-top:8px; }
@@ -563,6 +572,26 @@
         </div>
 
         <div class="card">
+            <div class="section-title"><span class="uic"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M3 12h3M18 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/><circle cx="12" cy="12" r="3.2"/></svg></span> AI ইনসাইট</div>
+
+            <button class="action-btn btn-primary" id="aiStudyBtn" onclick="runAIStudyAnalysis()">AI Study Analysis</button>
+            <div id="aiStudyLoading" class="ai-loading"><span class="ai-spinner"></span> বিশ্লেষণ তৈরি হচ্ছে…</div>
+            <div id="aiStudyResult" class="ai-result"></div>
+
+            <button class="action-btn btn-primary" id="aiPlanBtn" onclick="runAIDailyPlan()">AI Daily Plan</button>
+            <div id="aiPlanLoading" class="ai-loading"><span class="ai-spinner"></span> প্ল্যান তৈরি হচ্ছে…</div>
+            <div id="aiPlanResult" class="ai-result"></div>
+
+            <label class="form-label">মক টেস্ট বেছে নাও (না দিলে সবচেয়ে সাম্প্রতিকটি ব্যবহার হবে)</label>
+            <select class="form-select" id="aiMockSelect" style="margin-bottom:10px;"><option value="">সবচেয়ে সাম্প্রতিক মক</option></select>
+            <button class="action-btn btn-primary" id="aiMockBtn" onclick="runAIMockAnalysis()">AI Mock Analysis</button>
+            <div id="aiMockLoading" class="ai-loading"><span class="ai-spinner"></span> মক বিশ্লেষণ হচ্ছে…</div>
+            <div id="aiMockResult" class="ai-result"></div>
+
+            <div class="ai-note">AI-এর পরামর্শ তোমার লগ করা ডেটার ওপর ভিত্তি করে।</div>
+        </div>
+
+        <div class="card">
             <div class="section-title"><span class="uic"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4.3"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/></svg></span> টার্গেট সেটিংস</div>
             <label class="form-label">দৈনিক টার্গেট</label>
             <div class="duration-row">
@@ -693,7 +722,7 @@
 /* =========================================================
    CONSTANTS
 ========================================================= */
-const APP_VERSION = '2.1'; // increment by exactly 0.1 on every future edit (v1.7 -> v1.8 -> v1.9 -> v2.0 -> v2.1 -> ...)
+const APP_VERSION = '2.2'; // increment by exactly 0.1 on every future edit (v1.7 -> v1.8 -> v1.9 -> v2.0 -> v2.1 -> v2.2 -> ...)
 const SUBJECTS = ['Physics','Chemistry','Biology','Mathematics','English','Other'];
 const CORE_SUBJECTS = ['Physics','Chemistry','Mathematics','Biology'];
 function isCoreSubject(s){ return CORE_SUBJECTS.indexOf(s)>-1; }
@@ -793,6 +822,10 @@ let fb_signInWithPopup=null, fb_signInWithRedirect=null, fb_getRedirectResult=nu
 let fb_doc=null, fb_collection=null, fb_setDoc=null, fb_getDoc=null, fb_getDocs=null, fb_deleteDoc=null, fb_writeBatch=null;
 let fbSettingsDebounceTimer = null;
 
+// -- App Check + Firebase AI Logic (added v2.2) --
+const RECAPTCHA_ENTERPRISE_SITE_KEY = '6LftE8ItAAAAAA9FIExG3MmZBrkhQOPxG71j4iTw';
+let fbAppCheck=null, fbAI=null, fbAIModel=null, aiReady=false;
+
 function setSyncStatus(status){
     const el = document.getElementById('fbSyncStatus');
     if(!el) return;
@@ -818,12 +851,29 @@ function renderAccountUI(){
 
 async function fbInit(){
     try{
-        const [appMod, authMod, fsMod] = await Promise.all([
-            import('https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js'),
-            import('https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js'),
-            import('https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js')
+        const [appMod, authMod, fsMod, appCheckMod, aiMod] = await Promise.all([
+            import('https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js'),
+            import('https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js'),
+            import('https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js'),
+            import('https://www.gstatic.com/firebasejs/12.19.0/firebase-app-check.js'),
+            import('https://www.gstatic.com/firebasejs/12.19.0/firebase-ai.js')
         ]);
+
+        // 1. Core app
         fbApp = appMod.initializeApp(firebaseConfig);
+
+        // 2. App Check — must be initialized before any other Firebase backend call (Firestore/AI).
+        try{
+            fbAppCheck = appCheckMod.initializeAppCheck(fbApp, {
+                provider: new appCheckMod.ReCaptchaEnterpriseProvider(RECAPTCHA_ENTERPRISE_SITE_KEY),
+                isTokenAutoRefreshEnabled: true
+            });
+        }catch(appCheckErr){
+            // A placeholder/invalid site key or unsupported browser should not break the app.
+            console.warn('App Check failed to initialize; continuing without it.', appCheckErr);
+        }
+
+        // 3. Auth / Firestore (unchanged from v2.1)
         fbAuth = authMod.getAuth(fbApp);
         fbDb = fsMod.getFirestore(fbApp);
         fbGoogleProvider = new authMod.GoogleAuthProvider();
@@ -845,9 +895,20 @@ async function fbInit(){
 
         fb_onAuthStateChanged(fbAuth, handleAuthChange);
         fbReady = true;
+
+        // 4. Firebase AI Logic (Gemini) — optional layer; app/sync must work even if this fails.
+        try{
+            fbAI = aiMod.getAI(fbApp, { backend: new aiMod.GoogleAIBackend() });
+            fbAIModel = aiMod.getGenerativeModel(fbAI, { model: 'gemini-3.8-flash' });
+            aiReady = true;
+        }catch(aiErr){
+            console.warn('Firebase AI Logic failed to initialize; AI buttons will show an error when used.', aiErr);
+            aiReady = false;
+        }
     }catch(e){
         console.warn('Firebase failed to initialize; app continues in local-only mode.', e);
         fbReady = false;
+        aiReady = false;
         setSyncStatus('offline');
     }
 }
@@ -1067,6 +1128,224 @@ window.addEventListener('offline', ()=>{ if(fbUser) setSyncStatus('offline'); })
 fbInit();
 /* =========================================================================================
    END FIREBASE SYNC
+========================================================================================= */
+
+/* =========================================================================================
+   FIREBASE AI LOGIC  (added v2.2)
+   Gemini access via Firebase AI Logic (App Check-protected, no Gemini API key in this file).
+   - Purely additive: if AI init/calls fail, the rest of the app is completely unaffected.
+   - Only a minimal, purpose-built summary of the user's own local data is sent per request.
+   - AI prompts/responses are never written to Firestore or localStorage — UI-only, per request.
+========================================================================================= */
+
+/** Safe reusable call into the Gemini model. Never throws; always resolves to a result object. */
+async function runAI(prompt){
+    if(!navigator.onLine){
+        return { ok:false, code:'offline', message:'ইন্টারনেট সংযোগ নেই। অনলাইনে এসে আবার চেষ্টা করো।' };
+    }
+    if(!aiReady || !fbAIModel){
+        return { ok:false, code:'unavailable', message:'AI ফিচার এখনো তৈরি নয় বা লোড হয়নি। একটু পর আবার চেষ্টা করো।' };
+    }
+    try{
+        const result = await fbAIModel.generateContent(prompt);
+        const text = (result && result.response && typeof result.response.text === 'function') ? result.response.text() : '';
+        if(!text || !text.trim()){
+            return { ok:false, code:'empty', message:'AI থেকে কোনো উত্তর পাওয়া যায়নি। আবার চেষ্টা করো।' };
+        }
+        return { ok:true, text: text.trim() };
+    }catch(e){
+        console.warn('AI generation failed', e);
+        const msg = String((e && e.message) || e || '');
+        if(/quota|rate.?limit|resource.?exhausted|429/i.test(msg)){
+            return { ok:false, code:'quota', message:'এই মুহূর্তে অনেক বেশি রিকোয়েস্ট হয়ে গেছে (quota/rate limit)। কিছুক্ষণ পর আবার চেষ্টা করো।' };
+        }
+        if(/app.?check/i.test(msg)){
+            return { ok:false, code:'appcheck', message:'App Check ভেরিফিকেশন ব্যর্থ হয়েছে। reCAPTCHA site key ঠিকভাবে সেট করা আছে কিনা দেখো।' };
+        }
+        if(/network|fetch|offline|failed to fetch/i.test(msg)){
+            return { ok:false, code:'network', message:'নেটওয়ার্ক সমস্যার কারণে AI রেসপন্স আনা যায়নি। সংযোগ চেক করে আবার চেষ্টা করো।' };
+        }
+        return { ok:false, code:'generic', message:'AI থেকে উত্তর আনতে সমস্যা হয়েছে। আবার চেষ্টা করো।' };
+    }
+}
+
+/* ---- shared UI helpers for the 3 AI feature cards ---- */
+function aiSetLoading(prefix, isLoading){
+    const btn = document.getElementById(prefix+'Btn');
+    const loadingEl = document.getElementById(prefix+'Loading');
+    if(btn) btn.disabled = isLoading;
+    if(loadingEl) loadingEl.style.display = isLoading ? 'flex' : 'none';
+}
+function aiShowResult(prefix, text){
+    const el = document.getElementById(prefix+'Result');
+    if(!el) return;
+    el.classList.remove('ai-error');
+    el.textContent = text;
+    el.style.display = 'block';
+}
+function aiShowError(prefix, message){
+    const el = document.getElementById(prefix+'Result');
+    if(!el) return;
+    el.classList.add('ai-error');
+    el.textContent = '⚠️ ' + message;
+    el.style.display = 'block';
+}
+
+/* ---- minimal data summarizers: only what's needed, nothing more ---- */
+function aiRecentSessions(days){
+    const cutoff = dateNDaysAgoStr(days-1);
+    return sessions.filter(s=>s.date>=cutoff).map(s=>({date:s.date, subject:s.subject, paper:s.paper||null, chapter:s.chapter||null, type:s.type, minutes:s.minutes}));
+}
+function aiRecentMocks(days){
+    const cutoff = dateNDaysAgoStr(days-1);
+    return mocks.filter(m=>m.date>=cutoff).map(m=>({
+        date:m.date, subject:m.subject, paper:m.paper||null, chapter:m.chapter||null,
+        total:m.total, correct:m.correct, wrong:m.wrong, skipped:m.skipped, negMark:m.negMark,
+        score: +(m.correct - (m.wrong*(m.negMark||0))).toFixed(2),
+        accuracyPct: m.total ? Math.round((m.correct/m.total)*100) : null,
+        errorTags: m.errorTags || null,
+        timeTaken:m.timeTaken||null, timeAllowed:m.timeAllowed||null
+    }));
+}
+
+function aiBuildStudyContext(){
+    const recent = aiRecentSessions(21);
+    const byType = {}, bySubject = {};
+    recent.forEach(s=>{ byType[s.type] = (byType[s.type]||0) + s.minutes; bySubject[s.subject] = (bySubject[s.subject]||0) + s.minutes; });
+    return {
+        dailyTargetMinutes: settings.dailyTarget,
+        weeklyTargetMinutes: settings.weeklyTarget,
+        last21DaysSessions: recent,
+        minutesByStudyTypeLast21Days: byType,
+        minutesBySubjectLast21Days: bySubject,
+        recentMocks: aiRecentMocks(30)
+    };
+}
+function aiStudyAnalysisPrompt(ctx){
+    return [
+        'তুমি একজন অভিজ্ঞ স্টাডি কোচ। নিচের JSON হলো শিক্ষার্থীর নিজের লগ করা আসল স্টাডি সেশন ও মক টেস্ট ডেটা।',
+        'Use only the supplied data. If data is insufficient, say so. Do not invent subjects, numbers, or events that are not present in the data.',
+        '',
+        'DATA:',
+        JSON.stringify(ctx),
+        '',
+        'বাংলায়, সংক্ষিপ্ত ও কার্যকরভাবে এই কাঠামোয় বিশ্লেষণ দাও:',
+        '১. কী ভালো চলছে',
+        '২. কোথায় মনোযোগ দরকার',
+        '৩. সবচেয়ে বড় স্টাডি-প্যাটার্ন সমস্যা',
+        '৪. পরবর্তী ৭ দিনের জন্য ২-৩টি নির্দিষ্ট, বাস্তবসম্মত পদক্ষেপ',
+        'ছোট, স্পষ্ট বুলেট পয়েন্টে লেখো। অপ্রয়োজনে লম্বা কোরো না।'
+    ].join('\n');
+}
+
+function aiBuildDailyPlanContext(){
+    const today = todayStr();
+    const minutesLoggedToday = sessions.filter(s=>s.date===today).reduce((a,s)=>a+(s.minutes||0),0);
+    return {
+        today,
+        dailyTargetMinutes: settings.dailyTarget,
+        minutesLoggedTodaySoFar: minutesLoggedToday,
+        plannerDistributionPercent: plannerData.data,
+        plannerTotalHours: plannerData.totalHours,
+        last14DaysSessions: aiRecentSessions(14),
+        recentMocks: aiRecentMocks(21)
+    };
+}
+function aiDailyPlanPrompt(ctx){
+    return [
+        'তুমি একজন স্টাডি কোচ। নিচের JSON হলো শিক্ষার্থীর নিজের লগ করা আসল স্টাডি সেশন, মক টেস্ট ও প্ল্যানের ডেটা।',
+        'Use only the supplied data. If data is insufficient, say so. Do not invent subjects, numbers, or events that are not present in the data.',
+        'ব্যবহারকারীর ডেটা যদি নির্দিষ্ট ঘণ্টার প্ল্যান সমর্থন না করে, জোর করে একটা fixed hour-count চাপিয়ে দিও না — বাস্তবসম্মত থাকো।',
+        '',
+        'DATA:',
+        JSON.stringify(ctx),
+        '',
+        'আজকের জন্য একটা বাস্তবসম্মত ও সংক্ষিপ্ত স্টাডি প্ল্যান দাও। প্রতিটি ব্লকের জন্য দাও:',
+        '- আনুমানিক সময়কাল (duration)',
+        '- বিষয়/চ্যাপ্টার ফোকাস',
+        '- স্টাডি টাইপ (নতুন পড়া / রিভিশন / MCQ / মক / weak-point)',
+        '- এক লাইনে কারণ (কেন এই ব্লকটি গুরুত্বপূর্ণ)',
+        'শুধু কয়েকটা বাস্তবসম্মত ব্লক দাও, দরকার না হলে দিনটা পুরোপুরি ভরে দিও না।'
+    ].join('\n');
+}
+
+function aiPopulateMockSelect(){
+    const sel = document.getElementById('aiMockSelect');
+    if(!sel) return;
+    const sorted = [...mocks].sort((a,b)=>(b.ts||0)-(a.ts||0));
+    const prevVal = sel.value;
+    sel.innerHTML = '<option value="">সবচেয়ে সাম্প্রতিক মক</option>' + sorted.map(m=>{
+        const label = (m.date||'') + ' · ' + (m.subject||'') + (m.chapter? (' · '+m.chapter):'') + ' · ' + m.correct+'/'+m.total;
+        const safeLabel = label.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        return '<option value="'+m.id+'">'+safeLabel+'</option>';
+    }).join('');
+    if(sorted.some(m=>m.id===prevVal)) sel.value = prevVal;
+}
+function aiMockContext(mock){
+    return {
+        date:mock.date, subject:mock.subject, paper:mock.paper||null, chapter:mock.chapter||null, topic:mock.topic||null,
+        total:mock.total, correct:mock.correct, wrong:mock.wrong, skipped:mock.skipped, negMark:mock.negMark,
+        score: +(mock.correct - (mock.wrong*(mock.negMark||0))).toFixed(2),
+        accuracyPct: mock.total ? Math.round((mock.correct/mock.total)*100) : null,
+        attemptedPct: mock.total ? Math.round(((mock.total-mock.skipped)/mock.total)*100) : null,
+        errorTags: mock.errorTags || null,
+        timeTaken:mock.timeTaken||null, timeAllowed:mock.timeAllowed||null
+    };
+}
+function aiMockAnalysisPrompt(ctx){
+    return [
+        'তুমি একজন মক-টেস্ট বিশ্লেষক। নিচের JSON হলো শিক্ষার্থীর একটা আসল মক টেস্টের রেজাল্ট।',
+        'Use only the supplied data. Do not invent causes that are not supported by the supplied data — use wording such as "ডেটা অনুযায়ী মনে হচ্ছে..." where appropriate.',
+        '',
+        'DATA:',
+        JSON.stringify(ctx),
+        '',
+        'বাংলায়, সংক্ষিপ্তভাবে এই কাঠামোয় দাও:',
+        '১. মূল ভুলের প্যাটার্ন (error pattern)',
+        '২. শুধু এই ডেটার ভিত্তিতে সম্ভাব্য প্রস্তুতির ঘাটতি',
+        '৩. আগে কী রিভিশন করা উচিত',
+        '৪. পরের MCQ/মক প্র্যাকটিসে কী বদলানো উচিত',
+        '৫. একটা ছোট, তাৎক্ষণিক করণীয় (takeaway)',
+        'ছোট বুলেট পয়েন্টে লেখো, অপ্রয়োজনীয় বিস্তারিত এড়িয়ে যাও।'
+    ].join('\n');
+}
+
+async function runAIStudyAnalysis(){
+    if(!navigator.onLine){ aiShowError('aiStudy', 'ইন্টারনেট সংযোগ নেই। অনলাইনে এসে আবার চেষ্টা করো।'); return; }
+    aiSetLoading('aiStudy', true);
+    document.getElementById('aiStudyResult').style.display = 'none';
+    const ctx = aiBuildStudyContext();
+    const res = await runAI(aiStudyAnalysisPrompt(ctx));
+    aiSetLoading('aiStudy', false);
+    if(res.ok) aiShowResult('aiStudy', res.text); else aiShowError('aiStudy', res.message);
+}
+
+async function runAIDailyPlan(){
+    if(!navigator.onLine){ aiShowError('aiPlan', 'ইন্টারনেট সংযোগ নেই। অনলাইনে এসে আবার চেষ্টা করো।'); return; }
+    aiSetLoading('aiPlan', true);
+    document.getElementById('aiPlanResult').style.display = 'none';
+    const ctx = aiBuildDailyPlanContext();
+    const res = await runAI(aiDailyPlanPrompt(ctx));
+    aiSetLoading('aiPlan', false);
+    if(res.ok) aiShowResult('aiPlan', res.text); else aiShowError('aiPlan', res.message);
+}
+
+async function runAIMockAnalysis(){
+    if(!navigator.onLine){ aiShowError('aiMock', 'ইন্টারনেট সংযোগ নেই। অনলাইনে এসে আবার চেষ্টা করো।'); return; }
+    const sel = document.getElementById('aiMockSelect');
+    const chosenId = sel ? sel.value : '';
+    let mock = chosenId ? mocks.find(m=>m.id===chosenId) : null;
+    if(!mock) mock = [...mocks].sort((a,b)=>(b.ts||0)-(a.ts||0))[0];
+    if(!mock){ aiShowError('aiMock', 'এখনো কোনো মক টেস্ট লগ করা হয়নি।'); return; }
+
+    aiSetLoading('aiMock', true);
+    document.getElementById('aiMockResult').style.display = 'none';
+    const res = await runAI(aiMockAnalysisPrompt(aiMockContext(mock)));
+    aiSetLoading('aiMock', false);
+    if(res.ok) aiShowResult('aiMock', res.text); else aiShowError('aiMock', res.message);
+}
+/* =========================================================================================
+   END FIREBASE AI LOGIC
 ========================================================================================= */
 
 /* =========================================================
@@ -2018,6 +2297,7 @@ function saveMock(){
     showToast('মক সেভ হয়েছে');
     checkOldDataBanner();
     populateTrendFilter();
+    aiPopulateMockSelect();
 }
 
 function cancelEditMock(){
@@ -2116,6 +2396,7 @@ function deleteMock(id){
     renderErrorAnalysis();
     populateTrendFilter();
     renderMockTrend();
+    aiPopulateMockSelect();
     showToast('মুছে ফেলা হয়েছে');
 }
 
@@ -2334,6 +2615,7 @@ function renderMore(){
     updateDisplay();
     checkOldDataBanner();
     renderAccountUI();
+    aiPopulateMockSelect();
 }
 
 function saveSettings(){
